@@ -2,8 +2,8 @@ name: Fetch Upstream
 
 on:
   schedule:
-    # every hour, on the hour
-    - cron:  '0 * * * *'
+    # every day, at 6 a.m.
+    - cron:  '0 6 * * *'
 
 jobs:
   fetch-upstream:
