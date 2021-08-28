@@ -35,6 +35,7 @@
 #include "AI/ScriptDevAI/ScriptDevAIMgr.h"
 #include "Maps/InstanceData.h"
 #include "Cinematics/M2Stores.h"
+#include "Entities/Transports.h"
 
 bool ChatHandler::HandleDebugSendSpellFailCommand(char* args)
 {
@@ -137,7 +138,7 @@ bool ChatHandler::HandleDebugSendOpcodeCommand(char* /*args*/)
         return false;
     }
 
-    WorldPacket data(opcode, 0);
+    WorldPacket data((Opcodes)opcode, 0);
 
     std::string type;
     while (stream >> type)
@@ -1126,7 +1127,7 @@ bool ChatHandler::HandleDebugSpellModsCommand(char* args)
     if (!typeStr)
         return false;
 
-    uint16 opcode;
+    Opcodes opcode;
     if (strncmp(typeStr, "flat", strlen(typeStr)) == 0)
         opcode = SMSG_SET_FLAT_SPELL_MODIFIER;
     else if (strncmp(typeStr, "pct", strlen(typeStr)) == 0)
@@ -1467,21 +1468,6 @@ bool ChatHandler::HandleDebugChatFreezeCommand(char* /*args*/)
     return true;
 }
 
-bool ChatHandler::HandleDebugPacketHistory(char* args)
-{
-    auto history = m_session->GetOpcodeHistory();
-    std::string output = "Opcodes (reverse order):\n";
-    for (auto itr = history.rbegin(); itr != history.rend(); ++itr)
-    {
-        output += LookupOpcodeName(*itr);
-        output += "\n";
-    }
-
-    SendSysMessage(output.data());
-
-    return true;
-}
-
 bool ChatHandler::HandleDebugObjectFlags(char* args)
 {
     char* debugCmd = ExtractLiteralArg(&args);
@@ -1566,5 +1552,79 @@ bool ChatHandler::HandleDebugObjectFlags(char* args)
         }
     }
 
+    return true;
+}
+
+bool ChatHandler::HandleDebugOutPacketHistory(char* args)
+{
+    Player* player = getSelectedPlayer();
+    if (player == nullptr)
+        player = m_session->GetPlayer();
+
+    auto history = player->GetSession()->GetOutOpcodeHistory();
+    std::string output = "Opcodes (reverse order):\n";
+    for (auto itr = history.rbegin(); itr != history.rend(); ++itr)
+    {
+        output += LookupOpcodeName(*itr);
+        output += "\n";
+    }
+
+    SendSysMessage(output.data());
+    return true;
+}
+
+bool ChatHandler::HandleDebugIncPacketHistory(char* args)
+{
+    Player* player = getSelectedPlayer();
+    if (player == nullptr)
+        player = m_session->GetPlayer();
+
+    auto history = player->GetSession()->GetIncOpcodeHistory();
+    std::string output = "Opcodes (reverse order):\n";
+    for (auto itr = history.rbegin(); itr != history.rend(); ++itr)
+    {
+        output += LookupOpcodeName(*itr);
+        output += "\n";
+    }
+
+    SendSysMessage(output.data());
+    return true;
+}
+
+bool ChatHandler::HandleDebugTransports(char* args)
+{
+    Player* player = GetSession()->GetPlayer();
+    if (!player->IsInWorld())
+        return true;
+
+    auto& transports = player->GetMap()->GetTransports();
+    SendSysMessage("Transports:");
+    for (auto transport : transports)
+        PSendSysMessage("Name %s Entry %u Position %s", transport->GetName(), transport->GetEntry(), transport->GetPosition().to_string().data());
+    return true;
+}
+
+bool ChatHandler::HandleDebugSpawnsList(char* args)
+{
+    Player* player = GetSession()->GetPlayer();
+    if (!player->IsInWorld())
+        return true;
+
+    PSendSysMessage("%s", player->GetMap()->GetSpawnManager().GetRespawnList().c_str());
+    return true;
+}
+
+bool ChatHandler::HandleDebugRespawnDynguid(char* args)
+{
+    Creature* target = getSelectedCreature();
+    if (!target)
+    {
+        Player* player = GetSession()->GetPlayer();
+        player->GetMap()->GetSpawnManager().RespawnAll();
+        return true;
+    }
+
+    if (uint32 dbguid = target->GetDbGuid())
+        target->GetMap()->GetSpawnManager().RespawnCreature(dbguid);
     return true;
 }

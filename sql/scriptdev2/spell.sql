@@ -20,6 +20,12 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (12948,'spell_hakkar_summoned'),
 (13278,'spell_gdr_channel'),
 (13493,'spell_gdr_periodic'),
+(11886,'spell_capture_wildkin'),
+(11887,'spell_capture_hippogryph'),
+(11888,'spell_capture_faerie_dragon'),
+(11885,'spell_capture_treant'),
+(11889,'spell_capture_mountain_giant'),
+(11610,'spell_gammerita_turtle_camera'),
 (16380,'spell_greater_invisibility_mob'),
 (17016,'spell_placing_beacon_torch'),
 (17244,'spell_anastari_possess'),
@@ -30,6 +36,7 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (21651,'spell_opening_capping'),
 (23226,'spell_ritual_candle_aura'),
 (24693,'spell_hakkar_power_down'),
+(25228,'spell_soul_link'),
 (25684,'spell_summon_mana_fiends_moam'),
 (25813,'spell_conjure_dream_rift'),
 (25885,'spell_viscidus_summon_globs'),
@@ -115,8 +122,20 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (15326,'spell_blackout'),
 (27827,'spell_spirit_of_redemption_heal');
 
+-- Paladin
+INSERT INTO spell_scripts(Id, ScriptName) VALUES
+(21082,'spell_seal_of_the_crusader'),
+(20162,'spell_seal_of_the_crusader'),
+(20305,'spell_seal_of_the_crusader'),
+(20306,'spell_seal_of_the_crusader'),
+(20307,'spell_seal_of_the_crusader'),
+(20308,'spell_seal_of_the_crusader'),
+(20271,'spell_judgement');
+
 -- Warlock
 INSERT INTO spell_scripts(Id, ScriptName) VALUES
+(603,'spell_curse_of_doom'),
+(18662,'spell_curse_of_doom_effect'),
 (980,'spell_curse_of_agony'),
 (1014,'spell_curse_of_agony'),
 (6217,'spell_curse_of_agony'),
@@ -128,7 +147,13 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (1456,'spell_life_tap'),
 (11687,'spell_life_tap'),
 (11688,'spell_life_tap'),
-(11689,'spell_life_tap');
+(11689,'spell_life_tap'),
+(19505,'spell_devour_magic'),
+(19731,'spell_devour_magic'),
+(19734,'spell_devour_magic'),
+(19736,'spell_devour_magic'),
+(27276,'spell_devour_magic'),
+(27277,'spell_devour_magic');
 
 -- Warrior
 INSERT INTO spell_scripts(Id, ScriptName) VALUES
@@ -160,7 +185,11 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (9750,'spell_regrowth'),
 (9856,'spell_regrowth'),
 (9857,'spell_regrowth'),
-(9858,'spell_regrowth');
+(9858,'spell_regrowth'),
+(1178,'spell_druid_form_scaling_ap_auras'),
+(3025,'spell_druid_form_scaling_ap_auras'),
+(9635,'spell_druid_form_scaling_ap_auras'),
+(24905,'spell_druid_form_scaling_ap_auras');
 
 -- Rogue
 INSERT INTO spell_scripts(Id, ScriptName) VALUES
@@ -172,6 +201,17 @@ INSERT INTO spell_scripts(Id, ScriptName) VALUES
 (1857,'spell_vanish'),
 (14093,'spell_improved_sap'),
 (14185,'spell_preparation');
+
+-- Shaman
+INSERT INTO spell_scripts(Id, ScriptName) VALUES
+(324,'spell_damage_trigger_shield'),
+(325,'spell_damage_trigger_shield'),
+(905,'spell_damage_trigger_shield'),
+(945,'spell_damage_trigger_shield'),
+(8134,'spell_damage_trigger_shield'),
+(8788,'spell_damage_trigger_shield'),
+(10431,'spell_damage_trigger_shield'),
+(10432,'spell_damage_trigger_shield');
 
 -- Battleground and Outdoor PvP
 -- Alterac Valley

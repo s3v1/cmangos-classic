@@ -322,27 +322,6 @@ struct TaxiShortcutData
 
 typedef std::unordered_multimap <uint32 /*nodeid*/, TaxiShortcutData> TaxiShortcutMap;
 
-struct GraveYardData
-{
-    uint32 safeLocId;
-    Team team;
-};
-#define GRAVEYARD_AREALINK  0
-#define GRAVEYARD_MAPLINK   1
-typedef std::multimap < uint32 /*locId*/, GraveYardData > GraveYardMap;
-typedef std::pair<GraveYardMap::const_iterator, GraveYardMap::const_iterator> GraveYardMapBounds;
-
-struct WorldSafeLocsEntry
-{
-    uint32    ID;
-    uint32    map_id;
-    float     x;
-    float     y;
-    float     z;
-    float     o;
-    char*     name;
-};
-
 struct QuestgiverGreeting
 {
     std::string text;
@@ -459,6 +438,16 @@ class IdGenerator
         T m_nextGuid;
 };
 
+struct CreatureImmunity
+{
+    uint32 type;
+    uint32 value;
+};
+
+typedef std::vector<CreatureImmunity> CreatureImmunityVector;
+typedef std::map<uint32, CreatureImmunityVector> CreatureImmunitySetMap;
+typedef std::map<uint32, CreatureImmunitySetMap> CreatureImmunityContainer;
+
 class ObjectMgr
 {
         friend class PlayerDumpReader;
@@ -484,7 +473,7 @@ class ObjectMgr
 
         typedef std::unordered_map<uint32, PetCreateSpellEntry> PetCreateSpellMap;
 
-        std::unordered_map<uint32, std::vector<uint32>> const& GetCreatureSpawnEntry() const { return mCreatureSpawnEntryMap; }
+        std::unordered_map<uint32, std::vector<uint32>> const& GetCreatureSpawnEntry() const { return m_creatureSpawnEntryMap; }
 
         std::vector<uint32> LoadGameobjectInfo();
 
@@ -560,14 +549,6 @@ class ObjectMgr
         QuestgiverGreeting const* GetQuestgiverGreetingData(uint32 entry, uint32 type) const;
         TrainerGreeting const* GetTrainerGreetingData(uint32 entry) const;
 
-        WorldSafeLocsEntry const* GetClosestGraveYard(float x, float y, float z, uint32 mapId, Team team) const;
-        bool AddGraveYardLink(uint32 id, uint32 locId, uint32 linkKind, Team team, bool inDB = true);
-        void SetGraveYardLinkTeam(uint32 id, uint32 linkKey, Team team);
-        void LoadGraveyardZones();
-        GraveYardData const* FindGraveYardData(uint32 id, uint32 zoneId) const;
-        void LoadWorldSafeLocs() const;
-        static uint32 GraveyardLinkKey(uint32 locId, uint32 linkKind);
-
         AreaTrigger const* GetAreaTrigger(uint32 trigger) const
         {
             AreaTriggerMap::const_iterator itr = mAreaTriggers.find(trigger);
@@ -576,24 +557,26 @@ class ObjectMgr
             return nullptr;
         }
 
-        uint32 GetRandomEntry(uint32 guidLow) const
+        std::vector<uint32> const* GetAllRandomEntries(std::unordered_map<uint32, std::vector<uint32>> const& map, uint32 dbguid) const
         {
-            auto itr = mCreatureSpawnEntryMap.find(guidLow);
-            if (itr != mCreatureSpawnEntryMap.end())
-            {
-                auto& spawnList = (*itr).second;
-                return spawnList[irand(0, spawnList.size() - 1)];
-            }
-            return 0;
-        }
-
-        std::vector<uint32> const* GetAllRandomEntries(uint32 guidLow) const
-        {
-            auto itr = mCreatureSpawnEntryMap.find(guidLow);
-            if (itr != mCreatureSpawnEntryMap.end())
+            auto itr = map.find(dbguid);
+            if (itr != map.end())
                 return &(*itr).second;
             return nullptr;
         }
+
+        uint32 GetRandomEntry(std::unordered_map<uint32, std::vector<uint32>> const& map, uint32 dbguid) const
+        {
+            if (auto spawnList = GetAllRandomEntries(map, dbguid))
+                return (*spawnList)[irand(0, spawnList->size() - 1)];
+            return 0;
+        }
+
+        uint32 GetRandomGameObjectEntry(uint32 dbguid) const { return GetRandomEntry(m_gameobjectSpawnEntryMap, dbguid); }
+        std::vector<uint32> const* GetAllRandomGameObjectEntries(uint32 dbguid) const { return GetAllRandomEntries(m_gameobjectSpawnEntryMap, dbguid); }
+
+        uint32 GetRandomCreatureEntry(uint32 dbguid) const { return GetRandomEntry(m_creatureSpawnEntryMap, dbguid); }
+        std::vector<uint32> const* GetAllRandomCreatureEntries(uint32 dbguid) const { return GetAllRandomEntries(m_creatureSpawnEntryMap, dbguid); }
 
         AreaTrigger const* GetGoBackTrigger(uint32 map_id) const;
         AreaTrigger const* GetMapEntranceTrigger(uint32 Map) const;
@@ -685,6 +668,7 @@ class ObjectMgr
         void LoadEquipmentTemplates();
         void LoadGameObjectLocales();
         void LoadGameObjects();
+        void LoadGameObjectSpawnEntry();
         void LoadItemPrototypes();
         void LoadItemRequiredTarget();
         void LoadItemLocales();
@@ -732,6 +716,7 @@ class ObjectMgr
 
         void LoadCreatureTemplateSpells();
         void LoadCreatureCooldowns();
+        void LoadCreatureImmunities();
 
         void LoadGameTele();
 
@@ -1156,6 +1141,8 @@ class ObjectMgr
         * Qualifier: const
         **/
         CreatureClassLvlStats const* GetCreatureClassLvlStats(uint32 level, uint32 unitClass) const;
+
+        CreatureImmunityVector const* GetCreatureImmunitySet(uint32 entry, uint32 setId) const;
     protected:
 
         // current locale settings
@@ -1207,7 +1194,8 @@ class ObjectMgr
         GossipMenusMap      m_mGossipMenusMap;
         GossipMenuItemsMap  m_mGossipMenuItemsMap;
 
-        std::unordered_map<uint32, std::vector<uint32>> mCreatureSpawnEntryMap;
+        std::unordered_map<uint32, std::vector<uint32>> m_creatureSpawnEntryMap;
+        std::unordered_map<uint32, std::vector<uint32>> m_gameobjectSpawnEntryMap;
 		
         PointOfInterestMap  mPointsOfInterest;
 
@@ -1218,8 +1206,6 @@ class ObjectMgr
         ReservedNamesMap    m_ReservedNames;
 
         TaxiShortcutMap     m_TaxiShortcutMap;
-
-        GraveYardMap        mGraveYardMap;
 
         GameTeleMap         m_GameTeleMap;
 
@@ -1244,10 +1230,6 @@ class ObjectMgr
 
         void LoadGossipMenu(std::set<uint32>& gossipScriptSet);
         void LoadGossipMenuItems(std::set<uint32>& gossipScriptSet);
-
-        WorldSafeLocsEntry const* GetClosestGraveyardHelper(
-                GraveYardMapBounds bounds, float x, float y, float z,
-                uint32 mapId, Team team) const;
 
         typedef std::map<uint32, PetLevelInfo*> PetLevelInfoMap;
         // PetLevelInfoMap[creature_id][level]
@@ -1315,6 +1297,8 @@ class ObjectMgr
         CacheTrainerSpellMap m_mCacheTrainerSpellMap;
 
         BroadcastTextMap m_broadcastTextMap;
+
+        CreatureImmunityContainer m_creatureImmunities;
 };
 
 #define sObjectMgr MaNGOS::Singleton<ObjectMgr>::Instance()

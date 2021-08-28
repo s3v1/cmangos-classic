@@ -180,7 +180,7 @@ void WorldSession::HandleCreatureQueryOpcode(WorldPacket& recv_data)
         else
             data << uint32(Creature::ChooseDisplayId(ci));  // workaround, way to manage models must be fixed
 
-        data << uint16(ci->civilian);                       // wdbFeild14
+        data << uint16(ci->Civilian);                       // wdbFeild14
         SendPacket(data);
         DEBUG_LOG("WORLD: Sent SMSG_CREATURE_QUERY_RESPONSE");
     }
@@ -267,14 +267,14 @@ void WorldSession::HandleCorpseQueryOpcode(WorldPacket& /*recv_data*/)
         // search entrance map for proper show entrance
         if (InstanceTemplate const* temp = sObjectMgr.GetInstanceTemplate(mapid))
         {
-            if (temp->ghostEntranceMap >= 0)
+            if (temp->ghost_entrance_map >= 0)
             {
                 // if corpse map have entrance
-                if (TerrainInfo const* entranceMap = sTerrainMgr.LoadTerrain(temp->ghostEntranceMap))
+                if (TerrainInfo const* entranceMap = sTerrainMgr.LoadTerrain(temp->ghost_entrance_map))
                 {
-                    mapid = temp->ghostEntranceMap;
-                    x = temp->ghostEntranceX;
-                    y = temp->ghostEntranceY;
+                    mapid = temp->ghost_entrance_map;
+                    x = temp->ghost_entrance_x;
+                    y = temp->ghost_entrance_y;
                     z = entranceMap->GetHeightStatic(x, y, MAX_HEIGHT);
                 }
             }

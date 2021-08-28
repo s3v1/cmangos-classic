@@ -1438,6 +1438,19 @@ bool WorldObject::isInBack(WorldObject const* target, float distance, float arc 
     return target->GetDistance(GetPositionX(), GetPositionY(), GetPositionZ(), DIST_CALC_COMBAT_REACH) <= distance && !HasInArc(target, 2 * M_PI_F - arc);
 }
 
+Position WorldObject::GetFirstRandomAngleCollisionPosition(float dist, float angle)
+{
+    Position pos;
+    for (uint32 i = 0; i < 10; ++i)
+    {
+        GetFirstCollisionPosition(pos, dist, angle);
+        if (GetPosition().GetDistance(pos) > dist * 0.8f) // if at least 80% distance, good enough
+            break;
+        angle += (M_PI_F / 5); // else try slightly different angle
+    }
+    return pos;
+}
+
 void WorldObject::GetRandomPoint(float x, float y, float z, float distance, float& rand_x, float& rand_y, float& rand_z, float minDist /*=0.0f*/, float const* ori /*=nullptr*/) const
 {
     if (distance == 0)
@@ -1499,7 +1512,14 @@ void WorldObject::MovePositionToFirstCollision(Position& pos, float dist, float 
     if (IsUnit())
     {
         PathFinder path(static_cast<Unit*>(this));
-        path.calculate(destX, destY, destZ + halfHeight, false, true);
+        Vector3 src(pos.x, pos.y, pos.z);
+        Vector3 dest(destX, destY, destZ + halfHeight);
+        if (transport) // need to use offsets for PF check
+        {
+            transport->CalculatePassengerOffset(src.x, src.y, src.z);
+            transport->CalculatePassengerOffset(dest.x, dest.y, dest.z);
+        }
+        path.calculate(src, dest, false, true);
         if (path.getPathType())
         {
             G3D::Vector3 result = path.getPath().back();
@@ -1940,7 +1960,9 @@ Creature* WorldObject::SummonCreature(uint32 id, float x, float y, float z, floa
 GameObject* WorldObject::SpawnGameObject(uint32 dbGuid, Map* map)
 {
     GameObjectData const* data = sObjectMgr.GetGOData(dbGuid);
-    MANGOS_ASSERT(data);
+    if (!data)
+        return nullptr;
+
     GameObject* gameobject = GameObject::CreateGameObject(data->id);
     if (!gameobject->LoadFromDB(dbGuid, map, map->GenerateLocalLowGuid(HIGHGUID_GAMEOBJECT)))
     {
@@ -2646,7 +2668,7 @@ void WorldObject::PrintCooldownList(ChatHandler& chat) const
     chat.PSendSysMessage("Found %u permanent cooldown%s.", permCDCount, (permCDCount > 1) ? "s" : "");
 }
 
-int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry const* spellProto, SpellEffectIndex effect_index, int32 const* effBasePoints, bool maximum) const
+int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry const* spellProto, SpellEffectIndex effect_index, int32 const* effBasePoints, bool maximum, bool finalUse) const
 {
     Unit const* unitCaster = dynamic_cast<Unit const*>(this);
     Player const* unitPlayer = (GetTypeId() == TYPEID_PLAYER) ? static_cast<Player const*>(this) : nullptr;
@@ -2656,7 +2678,7 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
     int32 baseDice = int32(spellProto->EffectBaseDice[effect_index]);
     float basePointsPerLevel = spellProto->EffectRealPointsPerLevel[effect_index];
     float randomPointsPerLevel = spellProto->EffectDicePerLevel[effect_index];
-    int32 basePoints = effBasePoints
+    float basePoints = effBasePoints
         ? *effBasePoints - baseDice
         : spellProto->EffectBasePoints[effect_index];
 
@@ -2670,7 +2692,7 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
         else if (level < (int32)spellProto->baseLevel)
             level = (int32)spellProto->baseLevel;
         level -= (int32)spellProto->spellLevel;
-        basePoints += int32(level * basePointsPerLevel);
+        basePoints += level * basePointsPerLevel;
         randomPoints += int32(level * randomPointsPerLevel);
     }
 
@@ -2695,7 +2717,7 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
         }
     }
 
-    int32 value = basePoints;
+    float value = basePoints;
 
     // random damage
     if (comboDamage != 0.0f && unitPlayer && target && (target->GetObjectGuid() == unitPlayer->GetComboTargetGuid() || IsOnlySelfTargeting(spellProto)))
@@ -2703,7 +2725,7 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
 
     if (unitCaster)
         if (Player* modOwner = unitCaster->GetSpellModOwner())
-            modOwner->ApplySpellMod(spellProto->Id, SPELLMOD_ALL_EFFECTS, value);
+            modOwner->ApplySpellMod(spellProto->Id, SPELLMOD_ALL_EFFECTS, value, finalUse);
 
     if (unitCaster && spellProto->HasAttribute(SPELL_ATTR_LEVEL_DAMAGE_CALCULATION) && spellProto->spellLevel)
     {
@@ -2715,8 +2737,10 @@ int32 WorldObject::CalculateSpellEffectValue(Unit const* target, SpellEntry cons
             {
                 case SPELL_AURA_PERIODIC_DAMAGE:
                 case SPELL_AURA_PERIODIC_LEECH:
+                case SPELL_AURA_SCHOOL_ABSORB:
                     //   SPELL_AURA_PERIODIC_DAMAGE_PERCENT: excluded, abs values only
                 case SPELL_AURA_POWER_BURN_MANA:
+                case SPELL_AURA_PERIODIC_MANA_LEECH:
                     damage = true;
             }
         }
@@ -2769,7 +2793,17 @@ float Position::GetDistance(Position const& other) const
     return distsq;
 }
 
+std::string Position::to_string() const
+{
+    return "X: " + std::to_string(x) + " Y: " + std::to_string(y) + " Z: " + std::to_string(z) + " O: " + std::to_string(o);
+}
+
 bool operator!=(const Position& left, const Position& right)
 {
     return left.x != right.x || left.y != right.y || left.z != right.z || left.o != right.o;
+}
+
+bool WorldObject::IsUsingNewSpawningSystem() const
+{
+    return GetDbGuid() && GetDbGuid() != GetGUIDLow();
 }

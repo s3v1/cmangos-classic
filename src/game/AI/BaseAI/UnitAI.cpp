@@ -107,6 +107,11 @@ void UnitAI::EnterEvadeMode()
     m_unit->TriggerEvadeEvents();
 }
 
+void UnitAI::JustDied(Unit* killer)
+{
+    ClearSelfRoot();
+}
+
 void UnitAI::AttackedBy(Unit* attacker)
 {
     if (!m_unit->IsInCombat() && !m_unit->GetVictim())
@@ -267,6 +272,17 @@ void UnitAI::SetCombatMovement(bool enable, bool stopOrStartMovement /*=false*/)
     }
 }
 
+void UnitAI::SetFollowMovement(bool enable)
+{
+    if (enable)
+        m_unit->clearUnitState(UNIT_STAT_NO_FOLLOW_MOVEMENT);
+    else
+        m_unit->addUnitState(UNIT_STAT_NO_FOLLOW_MOVEMENT);
+
+    if (m_unit->IsMoving() && m_unit->GetMotionMaster()->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)
+        m_unit->InterruptMoving();
+}
+
 bool UnitAI::IsCombatMovement() const
 {
     return m_unit && !m_unit->hasUnitState(UNIT_STAT_NO_COMBAT_MOVEMENT);
@@ -351,7 +367,7 @@ void UnitAI::OnSpellCastStateChange(Spell const* spell, bool state, WorldObject*
         }
         else
         {
-            if (m_unit->GetVictim() && !GetCombatScriptStatus())
+            if (m_unit->GetVictim() && !IsTargetingRestricted())
                 m_unit->SetTarget(m_unit->GetVictim());
             else
                 m_unit->SetTarget(nullptr);
@@ -411,7 +427,7 @@ void UnitAI::OnChannelStateChange(Spell const* spell, bool state, WorldObject* t
     }
     else
     {
-        if (m_unit->GetVictim() && !GetCombatScriptStatus())
+        if (m_unit->GetVictim() && !IsTargetingRestricted())
             m_unit->SetTarget(m_unit->GetVictim());
         else
             m_unit->SetTarget(nullptr);
@@ -425,7 +441,7 @@ void UnitAI::CheckForHelp(Unit* who, Unit* me, float distance)
     if (!victim)
         return;
 
-    if (me->IsInCombat())
+    if (me->IsInCombat() || !me->CanCallForAssistance() || !who->CanCallForAssistance())
         return;
 
     // pulling happens once panic/retreating ends
@@ -513,6 +529,8 @@ class AiDelayEventAround : public BasicEvent
         bool Execute(uint64 /*e_time*/, uint32 /*p_time*/) override
         {
             Unit* pInvoker = m_owner.GetMap()->GetUnit(m_invokerGuid);
+            if (!pInvoker)
+                return true;
 
             for (GuidVector::const_reverse_iterator itr = m_receiverGuids.rbegin(); itr != m_receiverGuids.rend(); ++itr)
             {
@@ -638,12 +656,12 @@ void UnitAI::SetMeleeEnabled(bool state)
     m_meleeEnabled = state;
     if (m_unit->IsInCombat())
     {
-        if (m_meleeEnabled)
+        if (m_meleeEnabled && !m_unit->hasUnitState(UNIT_STAT_MELEE_ATTACKING))
         {
             if (m_unit->GetVictim())
                 m_unit->MeleeAttackStart(m_unit->GetVictim());
         }
-        else
+        else if (m_unit->hasUnitState(UNIT_STAT_MELEE_ATTACKING))
             m_unit->MeleeAttackStop(m_unit->GetVictim());
     }
 }
@@ -743,7 +761,20 @@ void UnitAI::ClearSelfRoot()
 void UnitAI::DespawnGuids(GuidVector& spawns)
 {
     for (ObjectGuid& guid : spawns)
-        if (Creature* spawn = m_unit->GetMap()->GetAnyTypeCreature(guid))
-            spawn->ForcedDespawn();
+    {
+        if (guid.IsAnyTypeCreature())
+        {
+            if (Creature* spawn = m_unit->GetMap()->GetAnyTypeCreature(guid))
+                spawn->ForcedDespawn();
+        }
+        else if (guid.IsGameObject())
+        {
+            if (GameObject* spawn = m_unit->GetMap()->GetGameObject(guid))
+            {
+                spawn->SetLootState(GO_JUST_DEACTIVATED);
+                spawn->SetForcedDespawn();
+            }
+        }
+    }
     spawns.clear();
 }

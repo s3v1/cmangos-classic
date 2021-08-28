@@ -22,6 +22,7 @@
 #include "Server/Opcodes.h"
 #include "Log.h"
 #include "Entities/Player.h"
+#include "Movement/MoveSpline.h"
 #include "Maps/MapManager.h"
 #include "Entities/Transports.h"
 #include "BattleGround/BattleGround.h"
@@ -63,6 +64,34 @@ void WorldSession::HandleMoveWorldportAckOpcode()
 
     // get the destination map entry, not the current one, this will fix homebind and reset greeting
     MapEntry const* mEntry = sMapStore.LookupEntry(loc.mapid);
+    
+    auto returnHomeFunc = [this, player = GetPlayer(), old_loc, loc]()
+    {
+        Map* map = nullptr;
+        // must have map in teleport
+        if (!map)
+            map = sMapMgr.CreateMap(loc.mapid, player);
+        if (!map)
+            map = sMapMgr.CreateMap(old_loc.mapid, player);
+
+        if (!map)
+        {
+            KickPlayer();
+            return;
+        }
+
+        player->SetMap(map);
+
+        player->SetSemaphoreTeleportFar(false);
+
+        // Teleport to previous place, if cannot be ported back TP to homebind place
+        if (!player->TeleportTo(old_loc))
+        {
+            DETAIL_LOG("WorldSession::HandleMoveWorldportAckOpcode: %s cannot be ported to his previous place, teleporting him to his homebind place...",
+                player->GetGuidStr().c_str());
+            player->TeleportToHomebind();
+        }
+    };
 
     Map* map = nullptr;
 
@@ -78,15 +107,17 @@ void WorldSession::HandleMoveWorldportAckOpcode()
                        " (map:%u, x:%f, y:%f, z:%f) Trying to port him to his previous place..",
                        GetPlayer()->GetGuidStr().c_str(), loc.mapid, loc.coord_x, loc.coord_y, loc.coord_z);
 
-            GetPlayer()->SetSemaphoreTeleportFar(false);
+            returnHomeFunc();
+            return;
+        }
+    }
 
-            // Teleport to previous place, if cannot be ported back TP to homebind place
-            if (!GetPlayer()->TeleportTo(old_loc))
-            {
-                DETAIL_LOG("WorldSession::HandleMoveWorldportAckOpcode: %s cannot be ported to his previous place, teleporting him to his homebind place...",
-                           GetPlayer()->GetGuidStr().c_str());
-                GetPlayer()->TeleportToHomebind();
-            }
+    uint32 miscRequirement = 0;
+    if (AreaTrigger const* at = sObjectMgr.GetMapEntranceTrigger(loc.mapid))
+    {
+        if (AREA_LOCKSTATUS_OK != GetPlayer()->GetAreaTriggerLockStatus(at, miscRequirement))
+        {
+            returnHomeFunc();
             return;
         }
     }
@@ -194,8 +225,7 @@ void WorldSession::HandleMoveWorldportAckOpcode()
         if (GetPlayer()->pvpInfo.inPvPEnforcedArea)
             GetPlayer()->CastSpell(GetPlayer(), 2479, TRIGGERED_OLD_TRIGGERED);
 
-        // resummon pet
-        GetPlayer()->ResummonPetTemporaryUnSummonedIfAny();
+        _player->ResummonPetTemporaryUnSummonedIfAny();
 
         // lets process all delayed operations on successful teleport
         GetPlayer()->ProcessDelayedOperations();
@@ -242,6 +272,8 @@ void WorldSession::HandleMoveTeleportAckOpcode(WorldPacket& recv_data)
 
     plMover->SetPosition(dest.coord_x, dest.coord_y, dest.coord_z, dest.orientation, true);
 
+    plMover->SetFallInformation(0, dest.coord_z);
+
     GenericTransport* currentTransport = nullptr;
     if (plMover->m_teleportTransport)
         currentTransport = plMover->GetMap()->GetTransport(plMover->m_teleportTransport);
@@ -270,7 +302,7 @@ void WorldSession::HandleMoveTeleportAckOpcode(WorldPacket& recv_data)
 
 void WorldSession::HandleMovementOpcodes(WorldPacket& recv_data)
 {
-    uint16 opcode = recv_data.GetOpcode();
+    Opcodes opcode = recv_data.GetOpcode();
     if (!sLog.HasLogFilter(LOG_FILTER_PLAYER_MOVES))
     {
         DEBUG_LOG("WORLD: Received opcode %s (%u, 0x%X)", LookupOpcodeName(opcode), opcode, opcode);
@@ -280,34 +312,13 @@ void WorldSession::HandleMovementOpcodes(WorldPacket& recv_data)
     Unit* mover = _player->GetMover();
     Player* plMover = mover->GetTypeId() == TYPEID_PLAYER ? (Player*)mover : nullptr;
 
-    // ignore, waiting processing in WorldSession::HandleMoveWorldportAckOpcode and WorldSession::HandleMoveTeleportAck
-    if (plMover && plMover->IsBeingTeleported())
-    {
-        recv_data.rpos(recv_data.wpos());                   // prevent warnings spam
-        return;
-    }
-
     /* extract packet */
     MovementInfo movementInfo;
     recv_data >> movementInfo;
     /*----------------*/
 
-    if (!VerifyMovementInfo(movementInfo))
+    if (!ProcessMovementInfo(movementInfo, mover, plMover, recv_data))
         return;
-
-    // fall damage generation (ignore in flight case that can be triggered also at lags in moment teleportation to another map).
-    if (opcode == MSG_MOVE_FALL_LAND && plMover && !plMover->IsTaxiFlying())
-        plMover->HandleFall(movementInfo);
-
-    /* process position-change */
-    HandleMoverRelocation(movementInfo);
-
-    // just landed from a knockback? update status
-    if (plMover && plMover->IsLaunched() && (recv_data.GetOpcode() == MSG_MOVE_FALL_LAND || recv_data.GetOpcode() == MSG_MOVE_START_SWIM))
-        plMover->SetLaunched(false);
-
-    if (plMover)
-        plMover->UpdateFallInformationIfNeed(movementInfo, opcode);
 
     WorldPacket data(opcode, recv_data.size());
     data << mover->GetPackGUID();             // write guid
@@ -330,9 +341,6 @@ void WorldSession::HandleForceSpeedChangeAckOpcodes(WorldPacket& recv_data)
     recv_data >> movementInfo;
     recv_data >> newspeed;
 
-    // now can skip not our packet
-    if (_player->GetObjectGuid() != guid)
-        return;
     /*----------------*/
 
     // client ACK send one packet for mounted/run case and need skip all except last from its
@@ -354,6 +362,18 @@ void WorldSession::HandleForceSpeedChangeAckOpcodes(WorldPacket& recv_data)
             sLog.outError("WorldSession::HandleForceSpeedChangeAck: Unknown move type opcode: %u", opcode);
             return;
     }
+
+    Unit* mover = _player->GetMover();
+
+    if (!ProcessMovementInfo(movementInfo, mover, _player, recv_data))
+        return;
+
+    const SpeedOpcodePair& speedOpcodes = SetSpeed2Opc_table[move_type];
+    WorldPacket data(speedOpcodes[2], 18);
+    data << guid.WriteAsPacked();
+    data << movementInfo;
+    data << newspeed;
+    mover->SendMessageToSetExcept(data, _player);
 
     // skip all forced speed changes except last and unexpected
     // in run/mounted case used one ACK and it must be skipped.m_forced_speed_changes[MOVE_RUN} store both.
@@ -450,10 +470,8 @@ void WorldSession::HandleMoveKnockBackAck(WorldPacket& recv_data)
     recv_data >> Unused<uint32>();                          // knockback packets counter
     recv_data >> movementInfo;
 
-    if (!VerifyMovementInfo(movementInfo, guid))
+    if (!ProcessMovementInfo(movementInfo, mover, _player, recv_data))
         return;
-
-    HandleMoverRelocation(movementInfo);
 
     if (mover->IsPlayer() && static_cast<Player*>(mover)->IsFreeFlying())
         mover->SetCanFly(true);
@@ -485,28 +503,74 @@ void WorldSession::SendKnockBack(Unit* who, float angle, float horizontalSpeed, 
     IncrementOrderCounter();
 }
 
-void WorldSession::HandleMoveHoverAck(WorldPacket& recv_data)
+void WorldSession::HandleMoveFlagChangeOpcode(WorldPacket& recv_data)
 {
-    DEBUG_LOG("CMSG_MOVE_HOVER_ACK");
+    DEBUG_LOG("%s", recv_data.GetOpcodeName());
 
+    ObjectGuid guid;
+    uint32 counter;
     MovementInfo movementInfo;
+    uint32 isApplied;
 
-    recv_data >> Unused<uint64>();                          // guid
-    recv_data >> Unused<uint32>();                          // unk
+    recv_data >> guid;
+    recv_data >> counter;
     recv_data >> movementInfo;
-    recv_data >> Unused<uint32>();                          // unk2
+    recv_data >> isApplied;
+
+    Unit* mover = _player->GetMover();
+
+    if (!ProcessMovementInfo(movementInfo, mover, _player, recv_data))
+        return;
+
+    Opcodes response = MSG_NULL_ACTION;
+
+    switch (recv_data.GetOpcode())
+    {
+        case CMSG_MOVE_HOVER_ACK: response = MSG_MOVE_HOVER; break;
+        case CMSG_MOVE_FEATHER_FALL_ACK: response = MSG_MOVE_FEATHER_FALL; break;
+        case CMSG_MOVE_WATER_WALK_ACK: response = MSG_MOVE_WATER_WALK; break;
+    }
+
+    WorldPacket data(response, 8);
+    data << guid.WriteAsPacked();
+    data << movementInfo;
+    mover->SendMessageToSetExcept(data, _player);
 }
 
-void WorldSession::HandleMoveWaterWalkAck(WorldPacket& recv_data)
+void WorldSession::HandleMoveRootAck(WorldPacket& recv_data)
 {
-    DEBUG_LOG("CMSG_MOVE_WATER_WALK_ACK");
-
+    DEBUG_LOG("WORLD: Received opcode %s", recv_data.GetOpcodeName());
+    // Pre-Wrath: broadcast root
+    ObjectGuid guid;
+    uint32 counter;
     MovementInfo movementInfo;
-
-    recv_data.read_skip<uint64>();                          // guid
-    recv_data.read_skip<uint32>();                          // unk
+    recv_data >> guid;
+    recv_data >> counter;
     recv_data >> movementInfo;
-    recv_data >> Unused<uint32>();                          // unk2
+
+    Unit* mover = _player->GetMover();
+
+    if (mover->GetObjectGuid() != guid)
+        return;
+
+    if (recv_data.GetOpcode() == CMSG_FORCE_MOVE_UNROOT_ACK) // unroot case
+    {
+        if (!mover->m_movementInfo.HasMovementFlag(MOVEFLAG_ROOT))
+            return;
+    }
+    else // root case
+    {
+        if (mover->m_movementInfo.HasMovementFlag(MOVEFLAG_ROOT))
+            return;
+    }
+
+    if (!ProcessMovementInfo(movementInfo, mover, _player, recv_data))
+        return;
+
+    WorldPacket data(recv_data.GetOpcode() == CMSG_FORCE_MOVE_UNROOT_ACK ? MSG_MOVE_UNROOT : MSG_MOVE_ROOT);
+    data << guid.WriteAsPacked();
+    data << movementInfo;
+    mover->SendMessageToSetExcept(data, _player);
 }
 
 void WorldSession::HandleSummonResponseOpcode(WorldPacket& recv_data)
@@ -546,19 +610,19 @@ void WorldSession::HandleMoveTimeSkippedOpcode(WorldPacket& recv_data)
     mover->SendMessageToSetExcept(data, _player);
 }
 
-bool WorldSession::VerifyMovementInfo(MovementInfo const& movementInfo, ObjectGuid const& guid) const
+bool WorldSession::VerifyMovementInfo(MovementInfo const& movementInfo, Unit* mover, bool unroot) const
 {
     // ignore wrong guid (player attempt cheating own session for not own guid possible...)
-    if (guid != _player->GetMover()->GetObjectGuid())
+    if (mover->GetObjectGuid() != _player->GetMover()->GetObjectGuid())
         return false;
 
-    return VerifyMovementInfo(movementInfo);
-}
-
-bool WorldSession::VerifyMovementInfo(MovementInfo const& movementInfo) const
-{
     if (!MaNGOS::IsValidMapCoord(movementInfo.GetPos().x, movementInfo.GetPos().y, movementInfo.GetPos().z, movementInfo.GetPos().o))
         return false;
+
+    // rooted mover sent packet without root or moving AND root - ignore, due to client crash possibility
+    if (!unroot)
+        if (mover->IsRooted() && (!movementInfo.HasMovementFlag(MOVEFLAG_ROOT) || movementInfo.HasMovementFlag(MOVEFLAG_MASK_MOVING)))
+            return false;
 
     if (movementInfo.HasMovementFlag(MOVEFLAG_ONTRANSPORT))
     {
@@ -636,4 +700,32 @@ void WorldSession::HandleMoverRelocation(MovementInfo& movementInfo)
         if (mover->IsInWorld())
             mover->GetMap()->CreatureRelocation((Creature*)mover, movementInfo.GetPos().x, movementInfo.GetPos().y, movementInfo.GetPos().z, movementInfo.GetPos().o);
     }
+}
+
+bool WorldSession::ProcessMovementInfo(MovementInfo& movementInfo, Unit* mover, Player* plMover, WorldPacket& recv_data)
+{
+    if (plMover && plMover->IsBeingTeleported())
+        return false;
+
+    if (!VerifyMovementInfo(movementInfo, mover, recv_data.GetOpcode() == CMSG_FORCE_MOVE_UNROOT_ACK))
+        return false;
+
+    if (!mover->movespline->Finalized())
+        return false;
+
+    // fall damage generation (ignore in flight case that can be triggered also at lags in moment teleportation to another map).
+    if (recv_data.GetOpcode() == MSG_MOVE_FALL_LAND && plMover && !plMover->IsTaxiFlying())
+        plMover->HandleFall(movementInfo);
+
+    /* process position-change */
+    HandleMoverRelocation(movementInfo);
+
+    // just landed from a knockback? update status
+    if (plMover && plMover->IsLaunched() && (recv_data.GetOpcode() == MSG_MOVE_FALL_LAND || recv_data.GetOpcode() == MSG_MOVE_START_SWIM))
+        plMover->SetLaunched(false);
+
+    if (plMover && recv_data.GetOpcode() != CMSG_MOVE_KNOCK_BACK_ACK)
+        plMover->UpdateFallInformationIfNeed(movementInfo, recv_data.GetOpcode());
+
+    return true;
 }

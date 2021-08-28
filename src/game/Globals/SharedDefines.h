@@ -300,7 +300,7 @@ enum SpellAttributes
 
 enum SpellAttributesEx
 {
-    SPELL_ATTR_EX_UNK0                         = 0x00000001,// 0
+    SPELL_ATTR_EX_DISMISS_PET                  = 0x00000001,// 0
     SPELL_ATTR_EX_DRAIN_ALL_POWER              = 0x00000002,// 1 use all power (Only paladin Lay of Hands and Bunyanize)
     SPELL_ATTR_EX_CHANNELED_1                  = 0x00000004,// 2 channeled 1
     SPELL_ATTR_EX_CANT_BE_REDIRECTED           = 0x00000008,// 3
@@ -311,7 +311,7 @@ enum SpellAttributesEx
     SPELL_ATTR_EX_NOT_IN_COMBAT_TARGET         = 0x00000100,// 8 Spell req target not to be in combat state
     SPELL_ATTR_EX_FACING_TARGET                = 0x00000200,// 9 TODO: CONFIRM!
     SPELL_ATTR_EX_NO_THREAT                    = 0x00000400,// 10 no generates threat on cast 100%
-    SPELL_ATTR_EX_UNK11                        = 0x00000800,// 11
+    SPELL_ATTR_EX_DONT_REFRESH_DURATION_ON_RECAST = 0x00000800,// 11 Aura will not refresh its duration when recast
     SPELL_ATTR_EX_IS_PICKPOCKET                = 0x00001000,// 12
     SPELL_ATTR_EX_FARSIGHT                     = 0x00002000,// 13 related to farsight
     SPELL_ATTR_EX_CHANNEL_TRACK_TARGET         = 0x00004000,// 14
@@ -362,7 +362,7 @@ enum SpellAttributesEx2
     SPELL_ATTR_EX2_IS_ARCANE_CONCENTRATION     = 0x00800000,// 23 Only mage Arcane Concentration have this flag
     SPELL_ATTR_EX2_UNK24                       = 0x01000000,// 24
     SPELL_ATTR_EX2_UNK25                       = 0x02000000,// 25
-    SPELL_ATTR_EX2_UNK26                       = 0x04000000,// 26 unaffected by school immunity
+    SPELL_ATTR_EX2_UNAFFECTED_BY_AURA_SCHOOL_IMMUNE = 0x04000000,// 26
     SPELL_ATTR_EX2_UNK27                       = 0x08000000,// 27
     SPELL_ATTR_EX2_UNK28                       = 0x10000000,// 28 no breaks stealth if it fails??
     SPELL_ATTR_EX2_CANT_CRIT                   = 0x20000000,// 29 Spell can't crit
@@ -381,7 +381,7 @@ enum SpellAttributesEx3
     SPELL_ATTR_EX3_UNK6                        = 0x00000040,// 6
     SPELL_ATTR_EX3_STACK_FOR_DIFF_CASTERS      = 0x00000080,// 7 create a separate (de)buff stack for each caster
     SPELL_ATTR_EX3_TARGET_ONLY_PLAYER          = 0x00000100,// 8 Can target only player
-    SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_SPECIAL = 0x00000200,// 9 Can only proc auras with SPELL_ATTR_EX3_CAN_PROC_FROM_TRIGGERED_SPECIAL
+    SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_SPECIAL = 0x00000200,// 9 Can only proc auras
     SPELL_ATTR_EX3_MAIN_HAND                   = 0x00000400,// 10 Main hand weapon required
     SPELL_ATTR_EX3_BATTLEGROUND                = 0x00000800,// 11 Can casted only on battleground
     SPELL_ATTR_EX3_CAST_ON_DEAD                = 0x00001000,// 12 target is a dead player (not every spell has this flag)
@@ -397,8 +397,8 @@ enum SpellAttributesEx3
     SPELL_ATTR_EX3_REQ_WAND                    = 0x00400000,// 22 Req wand
     SPELL_ATTR_EX3_UNK23                       = 0x00800000,// 23
     SPELL_ATTR_EX3_REQ_OFFHAND                 = 0x01000000,// 24 Req offhand weapon
-    SPELL_ATTR_EX3_UNK25                       = 0x02000000,// 25 no cause spell pushback ?
-    SPELL_ATTR_EX3_CAN_PROC_FROM_TRIGGERED_SPECIAL = 0x04000000,// 26 Auras with this attribute can proc off SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_SPECIAL
+    SPELL_ATTR_EX3_TREAT_AS_PERIODIC           = 0x02000000,// 25 Treated as periodic spell
+    SPELL_ATTR_EX3_CAN_PROC_FROM_TRIGGERED     = 0x04000000,// 26 Auras with this attribute can proc off SPELL_ATTR_EX3_TRIGGERED_CAN_TRIGGER_SPECIAL
     SPELL_ATTR_EX3_DRAIN_SOUL                  = 0x08000000,// 27
     SPELL_ATTR_EX3_UNK28                       = 0x10000000,// 28 always cast ok ? (requires more research)
     SPELL_ATTR_EX3_NO_DONE_BONUS               = 0x20000000,// 29 Resistances should still affect damage
@@ -423,7 +423,7 @@ enum SpellAttributesEx4
     SPELL_ATTR_EX4_UNK12                       = 0x00001000,// 12
     SPELL_ATTR_EX4_UNK13                       = 0x00002000,// 13
     SPELL_ATTR_EX4_DAMAGE_DOESNT_BREAK_AURAS   = 0x00004000,// 14
-    SPELL_ATTR_EX4_UNK15                       = 0x00008000,// 15
+    SPELL_ATTR_EX4_UNK15                       = 0x00008000,// 15 Dont add to spellbook
     SPELL_ATTR_EX4_NOT_USABLE_IN_ARENA         = 0x00010000,// 16 not usable in arena
     SPELL_ATTR_EX4_USABLE_IN_ARENA             = 0x00020000,// 17 usable in arena
     SPELL_ATTR_EX4_UNK18                       = 0x00040000,// 18
@@ -432,7 +432,7 @@ enum SpellAttributesEx4
     SPELL_ATTR_EX4_UNK21                       = 0x00200000,// 21
     SPELL_ATTR_EX4_UNK22                       = 0x00400000,// 22
     SPELL_ATTR_EX4_UNK23                       = 0x00800000,// 23
-    SPELL_ATTR_EX4_UNK24                       = 0x01000000,// 24
+    SPELL_ATTR_EX4_AUTO_RANGED_COMBAT_SPELL    = 0x01000000,// 24
     SPELL_ATTR_EX4_IS_PET_SCALING              = 0x02000000,// 25 pet scaling auras
     SPELL_ATTR_EX4_CAST_ONLY_IN_OUTLAND        = 0x04000000,// 26 Can only be used in Outland.
     SPELL_ATTR_EX4_UNK27                       = 0x08000000,// 27
@@ -444,7 +444,9 @@ enum SpellAttributesEx4
 
 enum SpellAttributesServerside
 {
-    SPELL_ATTR_SS_PREVENT_INVIS                = 0x00000001,// Unused in vanilla
+    // SPELL_ATTR_SS_PREVENT_INVIS                = 0x00000001,
+    // SPELL_ATTR_SS_AOE_CAP                      = 0x00000002,
+    SPELL_ATTR_SS_IGNORE_EVADE                 = 0x00000004,
 };
 
 enum SheathTypes
@@ -864,6 +866,7 @@ enum DamageEffectType
     SELF_DAMAGE_ROGUE_FALL  = 5,                            //< used to avoid rogue losing stealth on falling damage
     SELF_DAMAGE             = 6,
     INSTAKILL               = 7,                            //< used to instakill - no message
+    SPELL_DAMAGE_SHIELD     = 8,                            // doesnt put in combat
 };
 
 enum GameobjectTypes
@@ -2067,15 +2070,25 @@ enum ShapeshiftForm
     FORM_SPIRITOFREDEMPTION = 0x20
 };
 
-enum ShapeshiftFormFlags
+enum ShapeshiftFlags
 {
-    SHAPESHIFT_FORM_FLAG_ALLOW_ACTIVITY     = 0x00000001,   // Form allows various player activities, which normally cause "You can't X while shapeshifted." errors (npc/go interaction, item use, etc)
-    SHAPESHIFT_FORM_FLAG_UNK2               = 0x00000002,
-    SHAPESHIFT_FORM_FLAG_UNK3               = 0x00000004,
-    SHAPESHIFT_FORM_FLAG_ALLOW_NPC_INTERACT = 0x00000008,   // Form unconditionally allows talking to NPCs while shapeshifted (even if other activities are disabled)
-    SHAPESHIFT_FORM_FLAG_UNK5               = 0x00000010,
-    SHAPESHIFT_FORM_FLAG_UNK6               = 0x00000020,
-    SHAPESHIFT_FORM_FLAG_UNK7               = 0x00000040,
+    SHAPESHIFT_FLAG_STANCE                          = 0x00000001,   // Form allows various player activities, which normally cause "You can't X while shapeshifted." errors (npc/go interaction, item use, etc)
+    SHAPESHIFT_FLAG_NOT_TOGGLEABLE                  = 0x00000002,   // NYI
+    SHAPESHIFT_FLAG_PERSIST_ON_DEATH                = 0x00000004,   // NYI
+    SHAPESHIFT_FLAG_CAN_NPC_INTERACT                = 0x00000008,   // Form unconditionally allows talking to NPCs while shapeshifted (even if other activities are disabled)
+    SHAPESHIFT_FLAG_DONT_USE_WEAPON                 = 0x00000010,   // NYI
+    SHAPESHIFT_FLAG_AGILITY_ATTACK_BONUS            = 0x00000020,   // Druid Cat form
+    SHAPESHIFT_FLAG_CAN_USE_EQUIPPED_ITEMS          = 0x00000040,   // NYI
+    SHAPESHIFT_FLAG_CAN_USE_ITEMS                   = 0x00000080,   // NYI
+    SHAPESHIFT_FLAG_DONT_AUTO_UNSHIFT               = 0x00000100,   // Handled at client side
+    SHAPESHIFT_FLAG_CONSIDERED_DEAD                 = 0x00000200,   // NYI
+    SHAPESHIFT_FLAG_CAN_ONLY_CAST_SHAPESHIFT_SPELLS = 0x00000400,   // NYI
+    SHAPESHIFT_FLAG_STANCE_CANCEL_AT_FLIGHTMASTER   = 0x00000800,   // NYI
+    SHAPESHIFT_FLAG_NO_EMOTE_SOUNDS                 = 0x00001000,   // NYI
+    SHAPESHIFT_FLAG_NO_TRIGGER_TELEPORT             = 0x00002000,   // NYI
+    SHAPESHIFT_FLAG_CANNOT_CHANGE_EQUIPPED_ITEMS    = 0x00004000,   // NYI
+    SHAPESHIFT_FLAG_RESUMMON_PETS_ON_UNSHIFT        = 0x00008000,   // NYI
+    SHAPESHIFT_FLAG_CANNOT_USE_GAME_OBJECTS         = 0x00010000,   // NYI
 };
 
 enum CharLoginFailReasons
@@ -2332,7 +2345,8 @@ enum TradeStatus
 enum EncounterCreditType
 {
     ENCOUNTER_CREDIT_KILL_CREATURE = 0,
-    ENCOUNTER_CREDIT_CAST_SPELL = 1
+    ENCOUNTER_CREDIT_CAST_SPELL = 1,
+    ENCOUNTER_CREDIT_SCRIPT = 2,
 };
 
 enum WorldStateType

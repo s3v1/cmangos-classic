@@ -131,6 +131,12 @@ UPDATE spell_template SET MaxAffectedTargets=1 WHERE Id IN(30469);
 -- Fix duration of spell 28561 (Summon Blizzard): NPC should despawn after 30 seconds, not 5 minutes
 UPDATE spell_template SET DurationIndex=9 WHERE id=28561;
 
+-- Add SPELL_ATTR_EX3_DEATH_PERSISTENT to several non-passive spells which are triggered by items on equip
+UPDATE spell_template SET AttributesEx3=AttributesEx3|0x00100000 WHERE Id IN(
+'7363','16611','19307','17619','21079','22618','22620','23930','22988','23101','24198','28142','28143','28144','28145','28347','29112','29113',
+'29162');
+
+-- ============================================================
 -- Classic section
 
 -- Remove incorrect channel spell attribute for spell 29422 (Kel'Thuzad Channel Effect) used in Kel'Thuzad encounter
@@ -197,3 +203,28 @@ UPDATE spell_template SET `AttributesEx`=AttributesEx|0x00080000, EffectImplicit
 
 -- Added Ignore LoS attribute for Web Wrab spells used in Maexxna encounter (trigger NPC is sometimes behind spider web GOs that break LoS with player)
 UPDATE `spell_template` SET `AttributesEx2`=AttributesEx2|0x00000004 WHERE `id` BETWEEN 28617 AND 28621;
+
+UPDATE spell_template SET Attributes=Attributes|0x04000000 WHERE Id IN(24378,23505,23493,24379,23451,23978); -- all battleground power-up spells: Berserking, Restoration, and Speed
+
+-- LOS targeting section
+-- All other confirmed totems that ignore LOS
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(8230,8250,8514,10607,10611,15036,25554,25579,25580);
+-- Warrior Beneficial Shouts
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(469,2048,5242,6192,6673,11549,11550,11551,25289,27578);
+-- Furious howl
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(24604,24605,24603,24597);
+-- Unleashed Rage
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(30803,30804,30805,30806,30807);
+-- Priest healing spells
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(596,996,10960,10961,25308,25316,23455,23458,23459,25329,27803,27804,27805);
+-- Enchants
+UPDATE spell_template SET AttributesEx2=AttributesEx2|0x00000004 WHERE Id IN(27996,28005);
+
+-- BUG correction
+-- equip only item spells with travel time
+UPDATE spell_template SET Speed=0 WHERE Id IN(14824,14825,14826,14827,14828,14829,29413,29414,29415,29416,29417,29418,44972);
+
+UPDATE `spell_template` SET `RangeIndex` = 0 WHERE `Id` IN (16613,16619,16630,16631);
+
+-- Toxic Gas - used by Garden Gas in Naxx, remove SPELL_ATTR_EX_CHANNELED_1 and CHANNEL_FLAG_MOVEMENT to prevent aura being removed
+UPDATE spell_template SET AttributesEx=0, ChannelInterruptFlags=0 WHERE Id=30074;

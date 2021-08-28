@@ -114,7 +114,17 @@ void PetAI::AttackStart(Unit* who)
 
 void PetAI::EnterEvadeMode()
 {
-    m_unit->CombatStop();
+    // check for "chain pull" scenario - pet has already been sent to attack while exiting from an earlier combat
+    // avoid AttackStop in CombatStop so that pet doesn't lose current target and return to follow owner in this case
+    if (m_unit->GetTarget() && m_unit->GetVictim())
+    {
+        m_unit->RemoveAllAttackers();
+        m_unit->DeleteThreatList();
+        m_unit->GetCombatManager().StopCombatTimer();
+        m_unit->ClearInCombat();
+    }
+    else
+        m_unit->CombatStop();
 }
 
 void PetAI::UpdateAI(const uint32 diff)
@@ -140,8 +150,11 @@ void PetAI::UpdateAI(const uint32 diff)
     if (victim && victim->GetCombatManager().IsEvadingHome())
         victim = nullptr;
 
+    CharmInfo* charminfo = m_unit->GetCharmInfo();
+    MANGOS_ASSERT(charminfo);
+
     // Stop auto attack and chase if victim was dropped
-    if (inCombat && !victim)
+    if (inCombat && (!victim || (victim->IsCrowdControlled() && victim->HasAuraPetShouldAvoidBreaking(pet, charminfo->GetPetLastAttackCommandTime()))))
     {
         m_unit->AttackStop(true, true);
         inCombat = false;
@@ -151,9 +164,6 @@ void PetAI::UpdateAI(const uint32 diff)
         if (mm->GetCurrentMovementGeneratorType() == CHASE_MOTION_TYPE)
             mm->MovementExpired();
     }
-
-    CharmInfo* charminfo = m_unit->GetCharmInfo();
-    MANGOS_ASSERT(charminfo);
 
     if (charminfo->GetIsRetreating())
     {
@@ -187,7 +197,11 @@ void PetAI::UpdateAI(const uint32 diff)
             {
                 uint32 spellId = charminfo->GetSpellOpener();
                 SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
-                Spell* spell = new Spell(m_unit, spellInfo, TRIGGERED_NONE);
+                uint32 flags = TRIGGERED_NORMAL_COMBAT_CAST;
+                if (m_creature->HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED))
+                    flags |= TRIGGERED_PET_CAST;
+
+                Spell* spell = new Spell(m_unit, spellInfo, flags);
 
                 // Push back stored spell
                 targetSpellStore.push_back(TargetSpellList::value_type(victim, spell));
@@ -235,11 +249,21 @@ void PetAI::UpdateAI(const uint32 diff)
                 else if (IsNonCombatSpell(spellInfo))
                     continue;
 
-                Spell* spell = new Spell(m_unit, spellInfo, TRIGGERED_NONE);
+                Spell* spell = new Spell(m_unit, spellInfo, TRIGGERED_NORMAL_COMBAT_CAST);
 
-                if (inCombat && spell->CanAutoCast(victim))
+                if (inCombat && spell->CanAutoCast(IsOnlySelfTargeting(spellInfo) ? m_unit : victim))
                 {
                     targetSpellStore.push_back(TargetSpellList::value_type(victim, spell));
+                }
+                else if (!IsSpellRequireTarget(spellInfo))
+                {
+                    if (!spell->CanAutoCast(m_unit))
+                    {
+                        delete spell;
+                        continue;
+                    }
+
+                    targetSpellStore.push_back(TargetSpellList::value_type(nullptr, spell));
                 }
                 else
                 {
@@ -276,16 +300,19 @@ void PetAI::UpdateAI(const uint32 diff)
             targetSpellStore.erase(targetSpellStore.begin() + index);
 
             SpellCastTargets targets;
-            targets.setUnitTarget(target);
-
-            if (!m_unit->HasInArc(target))
+            if (target)
             {
-                m_unit->SetInFront(target);
-                if (target->GetTypeId() == TYPEID_PLAYER)
-                    m_unit->SendCreateUpdateToPlayer((Player*)target);
+                targets.setUnitTarget(target);
 
-                if (owner && owner->GetTypeId() == TYPEID_PLAYER)
-                    m_unit->SendCreateUpdateToPlayer((Player*)owner);
+                if (!m_unit->HasInArc(target))
+                {
+                    m_unit->SetInFront(target);
+                    if (target->GetTypeId() == TYPEID_PLAYER)
+                        m_unit->SendCreateUpdateToPlayer((Player*)target);
+
+                    if (owner && owner->GetTypeId() == TYPEID_PLAYER)
+                        m_unit->SendCreateUpdateToPlayer((Player*)owner);
+                }
             }
 
             if (pet)

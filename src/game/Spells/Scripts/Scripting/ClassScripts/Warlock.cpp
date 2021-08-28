@@ -18,6 +18,7 @@
  
 #include "Spells/Scripts/SpellScript.h"
 #include "Spells/SpellAuras.h"
+#include "Spells/SpellMgr.h"
 
 struct CurseOfAgony : public AuraScript
 {
@@ -41,7 +42,7 @@ struct LifeTap : public SpellScript
 
         Unit* caster = spell->GetCaster();
         if (Player* modOwner = caster->GetSpellModOwner())
-            modOwner->ApplySpellMod(spell->m_spellInfo->Id, SPELLMOD_COST, cost, spell);
+            modOwner->ApplySpellMod(spell->m_spellInfo->Id, SPELLMOD_COST, cost);
 
         int32 dmg = caster->SpellDamageBonusDone(caster, spell->m_spellInfo, uint32(cost > 0 ? cost : 0), SPELL_DIRECT_DAMAGE);
         dmg = caster->SpellDamageBonusTaken(caster, spell->m_spellInfo, dmg, SPELL_DIRECT_DAMAGE);
@@ -93,8 +94,68 @@ struct LifeTap : public SpellScript
     }
 };
 
+struct SoulLink : public AuraScript
+{
+    void OnAuraInit(Aura* aura) const override
+    {
+        if (aura->GetEffIndex() == EFFECT_INDEX_0)
+            aura->GetModifier()->m_auraname = SPELL_AURA_MOD_DAMAGE_PERCENT_DONE;
+    }
+};
+
+struct CurseOfDoom : public SpellScript, public AuraScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
+    {
+        // not allow cast at player
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetTypeId() == TYPEID_PLAYER)
+            return SPELL_FAILED_BAD_TARGETS;
+        return SPELL_CAST_OK;
+    }
+
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (!apply && aura->GetRemoveMode() == AURA_REMOVE_BY_DEATH && urand(0, 100) > 95)
+            if (Unit* caster = aura->GetCaster())
+                caster->CastSpell(nullptr, 18662, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+struct CurseOfDoomEffect : public SpellScript
+{
+    void OnSummon(Spell* spell, Creature* summon) const override
+    {
+        summon->CastSpell(nullptr, 42010, TRIGGERED_OLD_TRIGGERED);
+    }
+};
+
+struct DevourMagic : public SpellScript
+{
+    SpellCastResult OnCheckCast(Spell* spell, bool strict) const override
+    {
+        Unit* target = spell->m_targets.getUnitTarget();
+        Unit* caster = spell->GetCaster();
+        if (target && caster)
+        {
+            auto auras = target->GetSpellAuraHolderMap();
+            for (auto itr : auras)
+            {
+                SpellEntry const* spell = itr.second->GetSpellProto();
+                if (itr.second->GetTarget()->GetObjectGuid() != caster->GetObjectGuid() && spell->Dispel == DISPEL_MAGIC && IsPositiveSpell(spell) && !IsPassiveSpell(spell))
+                    return SPELL_CAST_OK;
+            }
+        }
+        return SPELL_FAILED_NOTHING_TO_DISPEL;
+    }
+};
+
 void LoadWarlockScripts()
 {
     RegisterAuraScript<CurseOfAgony>("spell_curse_of_agony");
     RegisterSpellScript<LifeTap>("spell_life_tap");
+    RegisterAuraScript<SoulLink>("spell_soul_link");
+    RegisterSpellScript<DevourMagic>("spell_devour_magic");
+    RegisterScript<CurseOfDoom>("spell_curse_of_doom");
+    RegisterSpellScript<CurseOfDoomEffect>("spell_curse_of_doom_effect");
 }

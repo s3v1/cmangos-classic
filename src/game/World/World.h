@@ -29,6 +29,7 @@
 #include "Globals/SharedDefines.h"
 #include "Entities/Object.h"
 #include "Multithreading/Messager.h"
+#include "Globals/GraveyardManager.h"
 
 #include <set>
 #include <list>
@@ -273,6 +274,7 @@ enum eConfigFloatValues
     CONFIG_FLOAT_GROUP_XP_DISTANCE,
     CONFIG_FLOAT_GHOST_RUN_SPEED_WORLD,
     CONFIG_FLOAT_GHOST_RUN_SPEED_BG,
+    CONFIG_FLOAT_LEASH_RADIUS,
     CONFIG_FLOAT_VALUE_COUNT
 };
 
@@ -609,6 +611,10 @@ class World
         Messager<World>& GetMessager() { return m_messager; }
 
         void IncrementOpcodeCounter(uint32 opcodeId); // thread safe due to atomics
+
+        void LoadWorldSafeLocs() const;
+        void LoadGraveyardZones();
+        GraveyardManager& GetGraveyardManager() { return m_graveyardManager; }
     protected:
         void _UpdateGameTime();
         // callback for UpdateRealmCharacters
@@ -717,6 +723,8 @@ class World
         std::array<std::atomic<uint32>, 2> m_onlineTeams;
         std::array<std::atomic<uint32>, MAX_RACES> m_onlineRaces;
         std::array<std::atomic<uint32>, MAX_CLASSES> m_onlineClasses;
+
+        GraveyardManager m_graveyardManager;
 };
 
 extern uint32 realmID;
