@@ -1,0 +1,19 @@
+#This action's repo: https://github.com/bdougie/fetch-upstream
+name: Fetch Upstream
+
+on:
+  schedule:
+    # every day, at 6 a.m.
+    - cron:  '0 6 * * *'
+
+jobs:
+  fetch-upstream:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Fetch Upstream
+      uses: bdougie/fetch-upstream@master
+      with:
+        upstream: cmangos/mangos-classic
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}      
